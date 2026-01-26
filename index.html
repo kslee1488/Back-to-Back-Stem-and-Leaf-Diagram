@@ -708,11 +708,6 @@
                 return;
             }
 
-            // Scroll to plot area on mobile
-            if(window.innerWidth < 1024) {
-                el('plotArea').scrollIntoView({behavior: 'smooth', block: 'center'});
-            }
-
             isAnimating = true;
             const btn = el('visualizeBtn');
             btn.disabled = true;
@@ -721,6 +716,11 @@
 
             await performVisualSort('inputA', 'containerA', 'text-sky-700 border-sky-200');
             await performVisualSort('inputB', 'containerB', 'text-violet-700 border-violet-200');
+
+            // Scroll to plot area on mobile AFTER sorting is complete
+            if(window.innerWidth < 1024) {
+                el('plotArea').scrollIntoView({behavior: 'smooth', block: 'center'});
+            }
 
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Building...`;
 
