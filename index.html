@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Back-to-Back Stem-and-Leaf Animation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Animation Keyframes */
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes highlightStem {
+            0% { background-color: #fcd34d; transform: scale(1.1); }
+            100% { background-color: #f1f5f9; transform: scale(1); }
+        }
+
+        .leaf-pop {
+            animation: popIn 0.4s ease-out forwards;
+        }
+
+        .stem-flash {
+            animation: highlightStem 0.5s ease-out;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Grid Layout for the Plot */
+        .plot-container {
+            display: grid;
+            grid-template-columns: 1fr 60px 1fr; /* Left Leaves | Stem | Right Leaves */
+            gap: 2px;
+            align-items: stretch;
+        }
+
+        .leaf-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            min-height: 44px;
+            background-color: white;
+            border-bottom: 1px solid #e2e8f0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Right side: standard flow */
+        .leaf-row.right {
+            justify-content: flex-start;
+        }
+
+        /* Left side: reverse flow so items start near the stem */
+        .leaf-row.left {
+            justify-content: flex-start;
+            flex-direction: row-reverse; 
+        }
+
+        .stem-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            background-color: #f1f5f9;
+            color: #475569;
+            border-bottom: 1px solid #e2e8f0;
+            border-left: 2px solid #cbd5e1;
+            border-right: 2px solid #cbd5e1;
+            z-index: 10;
+        }
+
+        .leaf-node {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-weight: 600;
+            color: white;
+            font-size: 0.9rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+
+        .leaf-group-a { background-color: #0ea5e9; } /* Sky 500 */
+        .leaf-group-b { background-color: #8b5cf6; } /* Violet 500 */
+
+        /* Quiz Inputs */
+        .quiz-input {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: transparent;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            outline: none;
+            color: #334155;
+            letter-spacing: 2px;
+        }
+        
+        .leaf-row.left .quiz-input {
+            text-align: right;
+            direction: ltr; /* Keep typing direction normal */
+        }
+
+        .quiz-input::placeholder {
+            color: #cbd5e1;
+            letter-spacing: normal;
+            font-size: 0.9rem;
+        }
+
+        .quiz-input.correct {
+            background-color: #dcfce7;
+            color: #15803d;
+        }
+
+        .quiz-input.incorrect {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .hidden-control {
+            display: none !important;
+        }
+
+        /* Visual Sort Styles */
+        .sort-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            min-height: 6rem;
+            align-content: flex-start;
+        }
+        .sort-chip {
+            will-change: transform;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm z-20">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2 rounded-lg transition-colors" id="logoBg">
+                <i class="fa-solid fa-chart-column" id="logoIcon"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-slate-900" id="appTitle">Back-to-Back Stem-and-Leaf Diagram</h1>
+                <p class="text-xs text-slate-500 font-medium" id="appSubtitle">Range: 70 - 129</p>
+            </div>
+        </div>
+        <div class="flex gap-3">
+            <button id="quizToggleBtn" onclick="toggleQuizMode()" class="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow transition flex items-center gap-2">
+                <i class="fa-solid fa-graduation-cap"></i> Start Quiz
+            </button>
+            <button id="resetBtn" onclick="resetData()" class="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition">
+                <i class="fa-solid fa-rotate-left mr-2"></i>Reset
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- Controls Sidebar -->
+        <aside class="w-96 bg-white border-r border-slate-200 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10 transition-colors duration-300" id="sidebar">
+            <div class="p-6 flex-1 overflow-y-auto">
+                
+                <!-- NORMAL MODE CONTROLS -->
+                <div id="normalControls">
+                    <!-- Group A Input -->
+                    <div id="containerA" class="mb-6">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-sm font-bold text-sky-700 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-sky-500 inline-block"></span>
+                                Group A (Left)
+                            </label>
+                            <button onclick="randomize('A')" class="text-xs text-sky-600 hover:underline">Randomize</button>
+                        </div>
+                        <textarea id="inputA" class="w-full h-24 p-3 mono text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none resize-none bg-slate-50 transition-colors" placeholder="e.g. 75, 82, 127...">75, 82, 88, 92, 105, 112, 128</textarea>
+                        <div class="text-xs text-slate-400 mt-1 flex justify-between">
+                            <span>Mirror Effect</span>
+                            <span id="countA">7 items</span>
+                        </div>
+                    </div>
+
+                    <!-- Group B Input -->
+                    <div id="containerB" class="mb-8">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-sm font-bold text-violet-700 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-violet-500 inline-block"></span>
+                                Group B (Right)
+                            </label>
+                            <button onclick="randomize('B')" class="text-xs text-violet-600 hover:underline">Randomize</button>
+                        </div>
+                        <textarea id="inputB" class="w-full h-24 p-3 mono text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none resize-none bg-slate-50 transition-colors" placeholder="e.g. 72, 88, 121...">72, 79, 95, 101, 105, 119, 123</textarea>
+                        <div class="text-xs text-slate-400 mt-1 flex justify-between">
+                            <span>Standard Effect</span>
+                            <span id="countB">7 items</span>
+                        </div>
+                    </div>
+
+                    <!-- Explanation Box -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+                        <h3 class="text-xs font-bold uppercase text-slate-500 mb-2">How it works</h3>
+                        <p class="text-sm text-slate-600 leading-relaxed mb-2">
+                            The <b>Stem</b> (center) holds the tens/hundreds digits (e.g., for 123, stem is 12).
+                        </p>
+                        <ul class="text-sm text-slate-600 space-y-2 pl-4 list-disc">
+                            <li><b class="text-sky-600">Left Side:</b> Leaves grow outwards from the stem (smallest number nearest the stem).</li>
+                            <li><b class="text-violet-600">Right Side:</b> Leaves grow normally (left-to-right).</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- QUIZ MODE CONTROLS -->
+                <div id="quizControls" class="hidden-control">
+                    
+                    <!-- Player Scorecard -->
+                    <div class="mb-6 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Player</div>
+                                <div id="playerNameDisplay" class="text-lg font-bold text-slate-700">--</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Score</div>
+                                <div id="playerScoreDisplay" class="text-2xl font-black text-emerald-600">0%</div>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                            <div id="scoreBar" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6">
+                        <h3 class="text-sm font-bold text-emerald-800 mb-2">Quiz Instructions</h3>
+                        <p class="text-xs text-emerald-700 leading-relaxed">
+                            Range: 70-129. Fill in the leaves.
+                            <br><br>
+                            <b>Key Rule:</b> Leaves must grow OUTWARDS from the stem.
+                        </p>
+                        <ul class="text-xs text-emerald-800 list-disc pl-4 mt-2 space-y-1">
+                            <li><b>Group A (Left):</b> Type <span class="font-mono bg-emerald-100 px-1 rounded">8 5 2</span> (Smallest on right)</li>
+                            <li><b>Group B (Right):</b> Type <span class="font-mono bg-emerald-100 px-1 rounded">2 5 8</span> (Smallest on left)</li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-6 p-4 bg-sky-50 rounded-lg border border-sky-100">
+                        <label class="text-xs font-bold text-sky-700 uppercase mb-2 block">Target Data: Group A</label>
+                        <div id="targetDataA" class="mono text-sm text-slate-700 leading-relaxed break-words">--</div>
+                    </div>
+
+                    <div class="mb-6 p-4 bg-violet-50 rounded-lg border border-violet-100">
+                        <label class="text-xs font-bold text-violet-700 uppercase mb-2 block">Target Data: Group B</label>
+                        <div id="targetDataB" class="mono text-sm text-slate-700 leading-relaxed break-words">--</div>
+                    </div>
+                    
+                    <button onclick="regenerateQuiz()" class="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-800 border border-slate-300 rounded-lg hover:bg-white transition mb-4">
+                        <i class="fa-solid fa-shuffle mr-1"></i> New Random Data
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Action Button -->
+            <div class="p-6 border-t border-slate-200 bg-slate-50">
+                <button id="visualizeBtn" onclick="startAnimation()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-play"></i> Visualize
+                </button>
+                <button id="checkAnswerBtn" onclick="checkAnswer()" class="hidden-control w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-check"></i> Check Answer
+                </button>
+            </div>
+        </aside>
+
+        <!-- Visualization Area -->
+        <div class="flex-1 bg-slate-100 flex flex-col relative overflow-hidden">
+            
+            <!-- Plot Header -->
+            <div class="bg-white border-b border-slate-200 px-8 py-3 grid grid-cols-[1fr_60px_1fr] gap-2 text-center text-xs font-bold uppercase tracking-wider text-slate-500 shadow-sm z-10">
+                <div class="text-sky-600">Group A (Leaves)</div>
+                <div class="text-slate-800">Stem</div>
+                <div class="text-violet-600">Group B (Leaves)</div>
+            </div>
+
+            <!-- The Plot -->
+            <div class="flex-1 overflow-y-auto p-8 flex justify-center items-start">
+                <div id="plotArea" class="plot-container w-full max-w-4xl bg-white shadow-xl rounded-2xl overflow-hidden border border-slate-200 min-h-[400px]">
+                    <!-- Placeholder -->
+                    <div class="col-span-3 h-64 flex flex-col items-center justify-center text-slate-400">
+                        <i class="fa-solid fa-chart-simple text-4xl mb-4 opacity-20"></i>
+                        <p>Enter data and click visualize</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Floating Current Number Processor (Animation Mode) -->
+            <div id="processor" class="absolute bottom-8 right-8 bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 hidden flex-col items-center w-48 transition-all duration-300 transform translate-y-4 opacity-0">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Processing</span>
+                <div id="procNumber" class="text-4xl font-black mono text-slate-800 mb-1">--</div>
+                <div id="procGroup" class="text-xs font-semibold px-2 py-1 rounded bg-slate-100 text-slate-500">Waiting...</div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Name Entry Modal -->
+    <div id="nameModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden-control transition-opacity">
+        <div class="bg-white p-6 rounded-2xl shadow-2xl max-w-sm w-full mx-4 border border-slate-200 transform transition-all scale-100">
+            <div class="text-center mb-6">
+                <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 text-xl">
+                    <i class="fa-solid fa-user-graduate"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900">Enter Quiz Mode</h3>
+                <p class="text-sm text-slate-500">Enter your name to start tracking your score.</p>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-slate-700 uppercase mb-1 ml-1">Your Name</label>
+                <input type="text" id="userNameInput" class="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition text-slate-800 font-medium" placeholder="e.g. Alex Student">
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="cancelQuiz()" class="flex-1 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition">Cancel</button>
+                <button onclick="confirmQuizStart()" class="flex-1 py-3 text-sm font-bold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 shadow-lg hover:shadow-xl transition">Start Quiz</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const el = id => document.getElementById(id);
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        
+        let isAnimating = false;
+        let isQuizMode = false;
+        let currentUserName = "Guest";
+        let quizSolution = { A: {}, B: {} }; // Stores correct leaves per stem
+
+        // --- CORE UTILS ---
+
+        function parseInput(str) {
+            return str.split(/[\s,]+/)
+                      .map(n => parseInt(n))
+                      .filter(n => !isNaN(n) && n >= 70 && n <= 129); // Restrict to 70-129
+        }
+
+        // --- VISUAL SORT LOGIC ---
+
+        async function performVisualSort(inputId, containerId, colorClass) {
+            const input = el(inputId);
+            const container = el(containerId);
+            const rawData = parseInput(input.value);
+            
+            if(rawData.length === 0) return;
+
+            input.classList.add('hidden-control');
+            
+            const visDiv = document.createElement('div');
+            visDiv.className = 'sort-container p-3 bg-slate-50 rounded-lg border border-slate-200 shadow-inner mb-6';
+            container.insertBefore(visDiv, input);
+
+            const chips = [];
+            rawData.forEach(val => {
+                const chip = document.createElement('div');
+                chip.className = `sort-chip px-2 py-1 text-xs font-bold rounded ${colorClass} shadow-sm border border-slate-200 bg-white`;
+                chip.textContent = val;
+                chip.dataset.val = val;
+                visDiv.appendChild(chip);
+                chips.push(chip);
+            });
+
+            await sleep(500); 
+
+            const positions = new Map();
+            chips.forEach(chip => {
+                const rect = chip.getBoundingClientRect();
+                positions.set(chip, { left: rect.left, top: rect.top });
+            });
+
+            chips.sort((a, b) => parseInt(a.dataset.val) - parseInt(b.dataset.val));
+            chips.forEach(chip => visDiv.appendChild(chip)); 
+
+            chips.forEach(chip => {
+                const first = positions.get(chip);
+                const last = chip.getBoundingClientRect();
+                
+                const deltaX = first.left - last.left;
+                const deltaY = first.top - last.top;
+
+                chip.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+                chip.style.transition = 'none';
+            });
+
+            void visDiv.offsetHeight;
+
+            chips.forEach(chip => {
+                chip.style.transform = '';
+                chip.style.transition = 'transform 0.8s cubic-bezier(0.2, 1, 0.3, 1)'; 
+            });
+
+            await sleep(1000); 
+
+            visDiv.remove();
+            input.value = chips.map(c => c.dataset.val).join(', ');
+            input.classList.remove('hidden-control');
+            
+            input.classList.add('bg-emerald-50');
+            setTimeout(() => input.classList.remove('bg-emerald-50'), 500);
+        }
+
+        // --- NORMAL MODE LOGIC ---
+
+        ['inputA', 'inputB'].forEach(id => {
+            el(id).addEventListener('input', () => {
+                const count = parseInput(el(id).value).length;
+                el(id === 'inputA' ? 'countA' : 'countB').textContent = `${count} items`;
+            });
+        });
+
+        function randomize(group) {
+            if(isAnimating) return;
+            const count = Math.floor(Math.random() * 8) + 5;
+            const arr = [];
+            const startStem = Math.floor(Math.random() * 4) + 7; 
+            
+            for(let i=0; i<count; i++) {
+                let val = (startStem * 10) + Math.floor(Math.random() * 30);
+                if (val < 70) val = 70;
+                if (val > 129) val = 129;
+                arr.push(val);
+            }
+            el(`input${group}`).value = arr.join(', ');
+            el(group === 'A' ? 'countA' : 'countB').textContent = `${arr.length} items`;
+        }
+
+        function resetData() {
+            if(isAnimating) return;
+            el('inputA').value = '';
+            el('inputB').value = '';
+            el('countA').textContent = '0 items';
+            el('countB').textContent = '0 items';
+            el('plotArea').innerHTML = `
+                <div class="col-span-3 h-64 flex flex-col items-center justify-center text-slate-400">
+                    <i class="fa-solid fa-chart-simple text-4xl mb-4 opacity-20"></i>
+                    <p>Enter data and click visualize</p>
+                </div>
+            `;
+            if(isQuizMode) regenerateQuiz();
+        }
+
+        // --- QUIZ MODE LOGIC ---
+
+        function toggleQuizMode() {
+            // If currently not in quiz mode, show modal first
+            if(!isQuizMode) {
+                el('nameModal').classList.remove('hidden-control');
+                el('userNameInput').focus();
+            } else {
+                // Exit quiz mode
+                isQuizMode = false;
+                switchUiToNormal();
+                resetData();
+            }
+        }
+
+        function cancelQuiz() {
+            el('nameModal').classList.add('hidden-control');
+        }
+
+        function confirmQuizStart() {
+            const rawName = el('userNameInput').value.trim();
+            currentUserName = rawName.length > 0 ? rawName : "Student";
+            
+            // Update Scoreboard UI
+            el('playerNameDisplay').textContent = currentUserName;
+            el('playerScoreDisplay').textContent = "0%";
+            el('scoreBar').style.width = "0%";
+            
+            el('nameModal').classList.add('hidden-control');
+            
+            isQuizMode = true;
+            switchUiToQuiz();
+            regenerateQuiz();
+        }
+
+        function switchUiToQuiz() {
+            const btn = el('quizToggleBtn');
+            const normalControls = el('normalControls');
+            const quizControls = el('quizControls');
+            const vizBtn = el('visualizeBtn');
+            const checkBtn = el('checkAnswerBtn');
+            const resetBtn = el('resetBtn');
+
+            btn.innerHTML = `<i class="fa-solid fa-arrow-left"></i> Exit Quiz`;
+            btn.className = "px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-200 hover:bg-slate-300 rounded-lg shadow transition flex items-center gap-2";
+            
+            el('appTitle').textContent = "Quiz Mode";
+            el('appSubtitle').textContent = "Range: 70 - 129";
+            el('logoBg').classList.replace('bg-indigo-600', 'bg-emerald-600');
+            el('logoIcon').classList.replace('fa-chart-column', 'fa-pencil');
+
+            normalControls.classList.add('hidden-control');
+            quizControls.classList.remove('hidden-control');
+            vizBtn.classList.add('hidden-control');
+            checkBtn.classList.remove('hidden-control');
+            resetBtn.classList.add('hidden-control');
+        }
+
+        function switchUiToNormal() {
+            const btn = el('quizToggleBtn');
+            const normalControls = el('normalControls');
+            const quizControls = el('quizControls');
+            const vizBtn = el('visualizeBtn');
+            const checkBtn = el('checkAnswerBtn');
+            const resetBtn = el('resetBtn');
+
+            btn.innerHTML = `<i class="fa-solid fa-graduation-cap"></i> Start Quiz`;
+            btn.className = "px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow transition flex items-center gap-2";
+            
+            el('appTitle').textContent = "Back-to-Back Stem-and-Leaf Diagram";
+            el('appSubtitle').textContent = "Range: 70 - 129";
+            el('logoBg').classList.replace('bg-emerald-600', 'bg-indigo-600');
+            el('logoIcon').classList.replace('fa-pencil', 'fa-chart-column');
+
+            normalControls.classList.remove('hidden-control');
+            quizControls.classList.add('hidden-control');
+            vizBtn.classList.remove('hidden-control');
+            checkBtn.classList.add('hidden-control');
+            resetBtn.classList.remove('hidden-control');
+        }
+
+        function regenerateQuiz() {
+            // Reset Score UI
+            el('playerScoreDisplay').textContent = "0%";
+            el('scoreBar').style.width = "0%";
+            el('checkAnswerBtn').innerHTML = `<i class="fa-solid fa-check"></i> Check Answer`;
+
+            const generateSet = () => {
+                const count = Math.floor(Math.random() * 5) + 5; 
+                const arr = [];
+                const startStem = Math.floor(Math.random() * 3) + 7; 
+                for(let i=0; i<count; i++) {
+                    const stemOffset = Math.floor(Math.random() * 4); 
+                    let val = (startStem + stemOffset) * 10 + Math.floor(Math.random() * 10);
+                    if(val < 70) val = 70;
+                    if(val > 129) val = 129;
+                    arr.push(val);
+                }
+                return arr.sort((a,b) => a-b);
+            };
+
+            const dataA = generateSet();
+            const dataB = generateSet();
+
+            el('targetDataA').textContent = dataA.join(', ');
+            el('targetDataB').textContent = dataB.join(', ');
+
+            quizSolution = { A: {}, B: {} };
+            const allNums = [...dataA, ...dataB];
+            const minStem = Math.floor(Math.min(...allNums) / 10);
+            const maxStem = Math.floor(Math.max(...allNums) / 10);
+
+            dataA.forEach(n => {
+                const s = Math.floor(n/10);
+                if(!quizSolution.A[s]) quizSolution.A[s] = [];
+                quizSolution.A[s].push(n%10);
+            });
+            dataB.forEach(n => {
+                const s = Math.floor(n/10);
+                if(!quizSolution.B[s]) quizSolution.B[s] = [];
+                quizSolution.B[s].push(n%10);
+            });
+
+            for(let s in quizSolution.A) quizSolution.A[s].sort((a,b) => a-b);
+            for(let s in quizSolution.B) quizSolution.B[s].sort((a,b) => a-b);
+
+            const container = el('plotArea');
+            container.innerHTML = '';
+            
+            for(let s = minStem; s <= maxStem; s++) {
+                const cellA = document.createElement('div');
+                cellA.className = 'leaf-row left';
+                cellA.innerHTML = `<input type="text" class="quiz-input" data-side="A" data-stem="${s}" placeholder="e.g. 8 5 2" autocomplete="off">`;
+
+                const cellStem = document.createElement('div');
+                cellStem.className = 'stem-cell mono text-lg';
+                cellStem.textContent = s;
+
+                const cellB = document.createElement('div');
+                cellB.className = 'leaf-row right';
+                cellB.innerHTML = `<input type="text" class="quiz-input" data-side="B" data-stem="${s}" placeholder="e.g. 2 5 8" autocomplete="off">`;
+
+                container.appendChild(cellA);
+                container.appendChild(cellStem);
+                container.appendChild(cellB);
+            }
+        }
+
+        function checkAnswer() {
+            const inputs = document.querySelectorAll('.quiz-input');
+            let correctCount = 0;
+            let totalCount = 0;
+
+            inputs.forEach(inp => {
+                totalCount++;
+                const side = inp.dataset.side;
+                const stem = inp.dataset.stem;
+                const userVal = inp.value;
+
+                let userLeaves = [];
+                const cleanStr = userVal.replace(/[^0-9]/g, '');
+                userLeaves = cleanStr.split('').map(n => parseInt(n));
+                
+                // Do not sort user leaves - enforce manual ordering
+
+                const correctSorted = quizSolution[side][stem] || [];
+                const expected = side === 'A' 
+                    ? [...correctSorted].reverse() 
+                    : correctSorted;
+
+                const isMatch = JSON.stringify(userLeaves) === JSON.stringify(expected);
+
+                if(isMatch) {
+                    inp.classList.remove('incorrect');
+                    inp.classList.add('correct');
+                    correctCount++;
+                } else {
+                    inp.classList.remove('correct');
+                    inp.classList.add('incorrect');
+                }
+            });
+
+            // Score Calculation
+            const percentage = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+            el('playerScoreDisplay').textContent = `${percentage}%`;
+            el('scoreBar').style.width = `${percentage}%`;
+
+            const btn = el('checkAnswerBtn');
+            if(percentage === 100) {
+                btn.innerHTML = `<i class="fa-solid fa-star"></i> Perfect! Next Level?`;
+                btn.onclick = () => {
+                    regenerateQuiz();
+                    btn.innerHTML = `<i class="fa-solid fa-check"></i> Check Answer`;
+                    btn.onclick = checkAnswer;
+                };
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-xmark"></i> Score: ${percentage}% - Try Again`;
+                setTimeout(() => {
+                    btn.innerHTML = `<i class="fa-solid fa-check"></i> Check Answer`;
+                }, 2000);
+            }
+        }
+
+        // --- ANIMATION LOGIC (Main) ---
+
+        async function startAnimation() {
+            if(isAnimating) return;
+            
+            const rawA = parseInput(el('inputA').value);
+            const rawB = parseInput(el('inputB').value);
+
+            if(rawA.length === 0 && rawB.length === 0) {
+                alert("Please enter valid data between 70 and 129.");
+                return;
+            }
+
+            isAnimating = true;
+            const btn = el('visualizeBtn');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Organizing...`;
+            btn.classList.add('opacity-75');
+
+            await performVisualSort('inputA', 'containerA', 'text-sky-700 border-sky-200');
+            await performVisualSort('inputB', 'containerB', 'text-violet-700 border-violet-200');
+
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Building...`;
+
+            const proc = el('processor');
+            proc.style.display = 'flex';
+            void proc.offsetWidth;
+            proc.classList.remove('translate-y-4', 'opacity-0');
+
+            const sortedA = parseInput(el('inputA').value);
+            const sortedB = parseInput(el('inputB').value);
+
+            const allNums = [...sortedA, ...sortedB];
+            const minStem = Math.floor(Math.min(...allNums) / 10);
+            const maxStem = Math.floor(Math.max(...allNums) / 10);
+
+            const container = el('plotArea');
+            container.innerHTML = '';
+            
+            for(let s = minStem; s <= maxStem; s++) {
+                const cellA = document.createElement('div');
+                cellA.className = 'leaf-row left';
+                cellA.id = `row-${s}-A`;
+                
+                const cellStem = document.createElement('div');
+                cellStem.className = 'stem-cell mono text-lg';
+                cellStem.textContent = s;
+                cellStem.id = `stem-${s}`;
+
+                const cellB = document.createElement('div');
+                cellB.className = 'leaf-row right';
+                cellB.id = `row-${s}-B`;
+
+                container.appendChild(cellA);
+                container.appendChild(cellStem);
+                container.appendChild(cellB);
+            }
+
+            await processGroup(sortedA, 'A', 'Group A', 'text-sky-600', 'bg-sky-100', 'leaf-group-a');
+            await sleep(500);
+            await processGroup(sortedB, 'B', 'Group B', 'text-violet-600', 'bg-violet-100', 'leaf-group-b');
+
+            proc.classList.add('translate-y-4', 'opacity-0');
+            await sleep(300);
+            proc.style.display = 'none';
+
+            isAnimating = false;
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-play"></i> Visualize`;
+            btn.classList.remove('opacity-75');
+        }
+
+        async function processGroup(data, groupCode, groupName, textColor, badgeBg, leafClass) {
+            const pNum = el('procNumber');
+            const pGroup = el('procGroup');
+
+            pGroup.textContent = groupName;
+            pGroup.className = `text-xs font-semibold px-2 py-1 rounded ${badgeBg} ${textColor.replace('text', 'text-opacity-80')}`;
+            pNum.className = `text-4xl font-black mono mb-1 ${textColor}`;
+
+            for(let num of data) {
+                pNum.textContent = num;
+                
+                const stem = Math.floor(num / 10);
+                const leaf = num % 10;
+                
+                const stemEl = el(`stem-${stem}`);
+                if(stemEl) {
+                    stemEl.classList.remove('stem-flash');
+                    void stemEl.offsetWidth; 
+                    stemEl.classList.add('stem-flash');
+                }
+
+                const rowEl = el(`row-${stem}-${groupCode}`);
+                if(rowEl) {
+                    const leafEl = document.createElement('div');
+                    leafEl.className = `leaf-node mono leaf-pop ${leafClass}`;
+                    leafEl.textContent = leaf;
+                    rowEl.appendChild(leafEl);
+                }
+
+                await sleep(200); 
+            }
+        }
+    </script>
+</body>
+</html>
