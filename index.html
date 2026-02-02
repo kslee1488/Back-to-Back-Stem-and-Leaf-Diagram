@@ -174,7 +174,6 @@
         }
     </style>
 </head>
-<!-- UPDATED: Body allows scrolling on mobile, restricted height on desktop -->
 <body class="min-h-screen lg:h-screen flex flex-col text-slate-800 lg:overflow-hidden">
 
     <!-- Header -->
@@ -199,11 +198,9 @@
     </header>
 
     <!-- Main Content -->
-    <!-- UPDATED: Flex direction column on mobile, row on large screens -->
     <main class="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
         
         <!-- Controls Sidebar -->
-        <!-- UPDATED: Full width on mobile, fixed width on desktop -->
         <aside class="w-full lg:w-96 bg-white border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col shadow-sm z-20 flex-shrink-0" id="sidebar">
             <div class="p-6 overflow-y-auto max-h-[50vh] lg:max-h-full">
                 
@@ -312,8 +309,8 @@
         </aside>
 
         <!-- Visualization Area -->
-        <!-- UPDATED: Flex-1 and allow scrolling of the whole area -->
-        <div class="flex-1 bg-slate-100 relative overflow-hidden h-[500px] lg:h-auto border-t lg:border-t-0 border-slate-200">
+        <!-- Fixed: Replaced lg:h-auto with lg:h-full to ensure correct desktop scrolling -->
+        <div class="flex-1 bg-slate-100 relative overflow-hidden h-[500px] lg:h-full border-t lg:border-t-0 border-slate-200">
             
             <!-- Scrollable Content Wrapper with Overflow Auto -->
             <div class="w-full h-full overflow-auto">
