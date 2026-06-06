@@ -387,6 +387,9 @@
         let currentUserName = "Guest";
         let quizSolution = { A: {}, B: {} }; // Stores correct leaves per stem
 
+        // Set your published Google Apps Script Web App URL here
+        const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxclb0ww0ExKZB4r2DijD4IJx0QEuY_5C6XJxAYYWwnf9zQpM2aIg6c5edcTIezZQ4L/exec";
+
         // --- CORE UTILS ---
 
         function parseInput(str) {
@@ -692,6 +695,9 @@
             el('playerScoreDisplay').textContent = `${percentage}%`;
             el('scoreBar').style.width = `${percentage}%`;
 
+            // Silently sync score to Google Sheets in the background
+            syncScoreToGoogleSheets(currentUserName, percentage);
+
             const btn = el('checkAnswerBtn');
             if(percentage === 100) {
                 btn.innerHTML = `<i class="fa-solid fa-star"></i> Perfect! Next Level?`;
@@ -815,6 +821,31 @@
                 }
 
                 await sleep(200); 
+            }
+        }
+
+        // --- GOOGLE SHEETS SYNC LOGIC ---
+        
+        async function syncScoreToGoogleSheets(name, score) {
+            // Prevent attempting to send if the URL hasn't been configured yet
+            if (!GAS_WEB_APP_URL || GAS_WEB_APP_URL === "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE") {
+                console.warn("GAS Web App URL is not set. Data not saved.");
+                return;
+            }
+
+            try {
+                // Using text/plain content-type bypasses strict CORS preflight issues common with GAS
+                await fetch(GAS_WEB_APP_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', // Tells browser not to enforce strict CORS policy for fire-and-forget payload
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8', 
+                    },
+                    body: JSON.stringify({ name: name, score: score })
+                });
+                console.log(`Score sync initiated for ${name}: ${score}%`);
+            } catch (error) {
+                console.error("Failed to sync score:", error);
             }
         }
     </script>
